@@ -6,9 +6,8 @@ source init.conf
 script="script$$.txt"
 
 tenantName="federatedDB-${dbName//_/-}"
-
-eval federated=( $( atlas --profile ${profile} dataFederation describe ${tenantName} -o json | jq .hostnames |sed -e's/\[//g' -e's/\]//g' -e's/,//g'  ) )
-FEDERATION_STRING="mongodb://${userName}:${passWord}@${federated}/?tls=true&authSource=admin"
+eval federated=$( atlas --profile ${profile} dataFederation describe ${tenantName} -o json | jq .hostnames[0] )
+FEDERATION_CONNECTION_STRING="mongodb://${userName}:${passWord}@${federated}/?tls=true&authSource=admin"
 
 cat <<EOF > ${script}
 db = db.getSiblingDB("${dbName}");
@@ -39,7 +38,7 @@ EOF
 # EOF
 
 printf "copy collections to ${dbTarget}\n"
-mongosh --quiet ${FEDERATION_STRING} ${script} 
+mongosh --quiet ${FEDERATION_CONNECTION_STRING} ${script} 
 
 rm "${script}"
 exit 0

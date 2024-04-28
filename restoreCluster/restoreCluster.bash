@@ -9,19 +9,39 @@ if [[ $? != 0 ]]
 then
     # build a cluster to match the source cluster
     out=$( atlas --profile ${profile} cluster describe ${sourceCluster} -o json )
-    printf "$out" | jq "del(.id,.name,.biConnector,.backupEnabled,.connectionStrings)" > ${clusterSpec}
-    printf "Creating a new cluster: ${restoreCluster} ...\n"
-    atlas --profile ${profile} cluster create ${restoreCluster} -f ${clusterSpec} -w
-    # eval instanceSize=$( printf "${out}" | jq .replicationSpecs[0].regionConfigs[0].electableSpecs.instanceSize )
-    # eval providerName=$( printf "${out}" | jq .replicationSpecs[0].regionConfigs[0].providerName )
-    # eval regionName=$(   printf "${out}" | jq .replicationSpecs[0].regionConfigs[0].regionName )
-    # eval diskSizeGB=$(   printf "${out}" | jq .diskSizeGB )
-        # --provider "${providerName}" \
-        # --region "${regionName}" \
-        # --members 3 \
-        # --tier "${instanceSize}" \
-        # --mdbVersion 7.2 \
-        # --diskSizeGB "${diskSizeGB}"
+    versionReleaseSystem=$( printf "${out}" | jq .versionReleaseSystem | tr -d '"' )
+    #printf "$out" | jq "del(.id,.name,.biConnector,.backupEnabled,.connectionStrings)" > ${clusterSpec}
+    if [[ ${versionReleaseSystem} == "CONTINUOUS" ]]
+    then
+        printf "Creating a new cluster: ${restoreCluster} ...\n"
+        printf "The source cluster is a CONTINOUS cluster - creating a new cluster with the same version\n"
+        printf "${out}" | jq "del(.id,.name,.biConnector,.backupEnabled,.connectionStrings,.replicationSpecs[0].regionConfigs[1],.replicationSpecs[0].regionConfigs[2])"\
+                        | sed -e 's/"nodeCount": ./"nodeCount": 3/' > ${clusterSpec}
+        atlas --profile ${profile} cluster create ${restoreCluster} -f ${clusterSpec} -w
+    else
+        printf "The source cluster is a RELEASE cluster - creating a new cluster with the same version\n"
+        eval providerName=$(            printf "${out}" | jq .replicationSpecs[0].regionConfigs[0].providerName )
+        eval regionName=$(              printf "${out}" | jq .replicationSpecs[0].regionConfigs[0].regionName )
+        eval instanceSize=$(            printf "${out}" | jq .replicationSpecs[0].regionConfigs[0].electableSpecs.instanceSize )
+        eval mongoDBMajorVersion=$(     printf "${out}" | jq .mongoDBMajorVersion )
+        eval diskSizeGB=$(              printf "${out}" | jq .diskSizeGB )
+        eval clusterType=$(             printf "${out}" | jq .clusterType )
+        eval shards=$(                  printf "${out}" | jq .replicationSpecs[0].numShards )
+        if [[ ${clusterType} == "REPLICASET" ]]
+        then
+            type="--type REPLICASET"
+        else
+            type="--type SHARDED --shards ${shards}"
+        fi
+        atlas --profile ${profile} cluster create ${restoreCluster} \
+          --provider "${providerName}" \
+          --region "${regionName}" \
+          --members 3 \
+          --tier "${instanceSize}" \
+          --mdbVersion "${mongoDBMajorVersion}" \
+          --diskSizeGB "${diskSizeGB}" \
+          ${type} -w
+    fi
 else
     eval paused=$( printf "${out}" | jq .paused )
     if [[ $paused == "true" ]]

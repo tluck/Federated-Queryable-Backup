@@ -4,7 +4,6 @@ dbName="${1:-test}"
 source init.conf
 tenantName="federatedDB-${dbName//_/-}"
 fileName="fedDBinput$$.json"
-# curlData="@"${fileName}
 
 # get a list of the all the dbs and collections in the cluster
 genConfiguration.bash "${dbName}" | jq  > "${fileName}"
